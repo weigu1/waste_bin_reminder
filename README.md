@@ -4,7 +4,7 @@
 
 ## Some infos
 
-I liked the idea of an illuminated waste-bin to remind us to put out the rubbish bins. Meanwhile we have 5 different bins, so the task is not as simple as it was years ago :)
+I liked the idea of an illuminated waste-bin to remind us to put out the rubbish bins. Meanwhile we have 5 different bins, so the task to remind the day and the bin is not as simple as it was years ago :)
 
 ### BOM
 
@@ -13,7 +13,12 @@ I liked the idea of an illuminated waste-bin to remind us to put out the rubbish
 
 ### Software
 
-The software gets the info from a JSON String published on a [server](https://www.weigu.lu/waste_collection/index.php).
+The software gets the info from a JSON String published on a [server](https://www.weigu.lu/waste_collection/index.php) in the following format:
+
+```JSON
+{"2023-01-03":"biomass","2023-01-06":"valorlux","2023-01-11":"waste","2023-01-12":"paper",
+ "2023-12-14":"paper","2023-12-19":"biomass","2023-12-22":"valorlux","2023-12-27":"waste"}
+```
 
 It uses my ESPToolbox library for WiFi and logging functions (UDP) and to get the time. To avoid version problems the lib is included in the sketch folder. Programming is done over OTA.
 
