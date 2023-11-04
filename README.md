@@ -13,14 +13,15 @@ I liked the idea of an illuminated waste-bin to remind us to put out the rubbish
 
 ### Software
 
-The software communicates per `MQTT` over `WiFi`. It uses my ESPToolbox library for WiFi and logging functions (UDP) and to get the time. To avoid version problems the lib is included in the sketch folder. Programming is done over OTA.
+The software gets the info from a JSON String published on a [server](https://www.weigu.lu/waste_collection/index.php).
+
+It uses my ESPToolbox library for WiFi and logging functions (UDP) and to get the time. To avoid version problems the lib is included in the sketch folder. Programming is done over OTA.
 
 All relevant data you must or can change are in a config (`config.h`) file, also contained in the main folder. You can also place this file in the sketchbook/library folder named `Secrets` and rename it to your needs (e.g. `secrets.h`).
 
-In the main file (.ino) you can activate or deactivate features by commenting or uncommenting some lines. Here you must activate `USE_SECRETS`:
+In the main file (.ino) you can activate or deactivate features by commenting or uncommenting some lines. Here you can activate `USE_SECRETS`.
 
-In the `config.h` file, you must change the WiFi parameter and the MQTT server address. In the automated watering array we define the start times and duration of watering events.
+The software also publishes the data per `MQTT`.
 
-Other things we perhaps want to change are the publishing interval `PUBLISH_TIME` or the MQTT topics.
 
 ## All infos on: <http://www.weigu.lu/microcontroller/waste_bin_reminder/index.html>
