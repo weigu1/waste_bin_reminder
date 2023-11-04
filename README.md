@@ -1,6 +1,6 @@
 # Waste bin reminder
 
-![waste bin reminder](png/waste_bin_600_v.png "waste bin reminder")
+![waste bin reminder](png/waste_bin_400_v.png "waste bin reminder")
 
 ## Some infos
 
