@@ -39,4 +39,4 @@ const byte PIXEL_PIN = 7; //Lolin Pin 7, Dev Pin 8
 const byte NUMPIXELS = 1;
 
 String which_bin = "";
-String json = "";
+String json = "nothing";

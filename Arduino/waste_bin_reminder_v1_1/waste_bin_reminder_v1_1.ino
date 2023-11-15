@@ -1,7 +1,10 @@
 /*
-  waste_bin_reminder.ino  
-  v1.0 2023-11-04
-  v1.1 2023-11-11 removed bug (memory run out and ESP reboots after panic)
+  waste_bin_reminder_v1_1.ino    
+
+  v1.1 2023-11-15 get data less often
+
+  Use esp32 core version 2.0.14; the alpha versions of 3 have a problem with the neopixel lib
+
   www.weigu.lu  
   Hardware used: Lolin C3 Mini
   for UDP, listen on Linux PC (UDP_LOG_PC_IP) with netcat command:
@@ -88,8 +91,7 @@ void setup() {
     Tb.set_static_ip(true,NET_LOCAL_IP, NET_GATEWAY, NET_MASK, NET_DNS);
   #endif // ifdef STATIC
   Tb.init_ntp_time();
-  Tb.init_wifi_sta(WIFI_SSID, WIFI_PASSWORD, NET_MDNSNAME, NET_HOSTNAME);
-  
+  Tb.init_wifi_sta(WIFI_SSID, WIFI_PASSWORD, NET_MDNSNAME, NET_HOSTNAME);  
   delay(1000);
   //WiFi.setTxPower(WIFI_POWER_8_5dBm);
   #ifdef OTA
@@ -97,7 +99,8 @@ void setup() {
   #endif // ifdef OTA    
   delay(1000);
   MQTT_Client.setBufferSize(MQTT_MAXIMUM_PACKET_SIZE);
-  MQTT_Client.setServer(MQTT_SERVER,MQTT_PORT); //open connection MQTT server
+  MQTT_Client.setServer(MQTT_SERVER,MQTT_PORT); //open connection MQTT server  
+  get_json_data();
   Tb.log_ln("Setup done!");
 }
 
@@ -107,17 +110,16 @@ void loop() {
   #ifdef OTA
     ArduinoOTA.handle();
   #endif // ifdef OTA
-  if (Tb.non_blocking_delay(PUBLISH_TIME)) { // PUBLISH_TIME in config.h
-    json = get_json_from_server();
-    //long hippi = ESP.getFreeHeap();
-    //Tb.log("Heap: " +  String(hippi) + '\n');
-    if (json!="nothing") {
-      which_bin = get_bin_from_json(json);
-      Tb.log("Which bin to use: " + String(which_bin) + '\n');      
-      set_wastebin_color(which_bin);
-      mqtt_publish();
-      Tb.log("Waiting some time before the next round...\n");
-    }
+  if ((Tb.t.hour==0) && (Tb.t.minute==0) && (Tb.t.second==0)) {
+    get_json_data();
+    delay(1000);
+  }
+  if (Tb.non_blocking_delay(PUBLISH_TIME)) { // PUBLISH_TIME in config.h    
+    which_bin = get_bin_from_json(json);
+    Tb.log("Which bin to use: " + String(which_bin) + '\n');      
+    set_wastebin_color(which_bin);
+    mqtt_publish();
+    Tb.log("Waiting some time before the next round...\n");
   }
   if (WiFi.status() != WL_CONNECTED) {   // if WiFi disconnected, reconnect
     Tb.init_wifi_sta(WIFI_SSID, WIFI_PASSWORD, NET_MDNSNAME, NET_HOSTNAME);
@@ -169,6 +171,18 @@ void mqtt_publish() {
 
 /********** HTTPS functions **************************************************/
 
+void get_json_data() {
+  while (json=="nothing") {
+    json = get_json_from_server();
+    Tb.log_ln(json);
+    pixels.setPixelColor(0, pixels.Color(255, 0, 0)); //RED
+    pixels.show();
+    delay(2000);
+  }  
+  pixels.setPixelColor(0, pixels.Color(0, 0, 0)); // clear
+  pixels.show();
+}  
+
 String get_json_from_server() {
   Serial.println("\nStarting connection to server...");
   int http_code;
@@ -198,43 +212,6 @@ String get_json_from_server() {
   return json_payload;
 }  
 
-/*String get_json_from_server() {
-  int http_code;
-  String json_payload;
-  WiFiClientSecure *Wifi_s_client = new WiFiClientSecure;
-  //WiFiClientSecure Wifi_s_client;
-  if(Wifi_s_client) {
-    Wifi_s_client->setInsecure();   // set secure client without certificate
-    //Wifi_s_client.setInsecure();   // set secure client without certificate
-    HTTPClient Https;               //create an HTTPClient instance
-    //if (Https.begin(*Wifi_s_client, server_name)) {  // HTTPS      
-    if (Https.begin(*Wifi_s_client, server_name)) {  // HTTPS      
-      http_code = Https.GET(); // start connection and send HTTPS header
-      Tb.log("[HTTPS] GET... code: " + String(http_code) + '\n');
-      if (http_code > 0) { // httpCode will be negative on error              
-        if (http_code == HTTP_CODE_OK || http_code == HTTP_CODE_MOVED_PERMANENTLY) {
-          json_payload = Https.getString(); // file found  
-        }
-      }           
-      else {
-        Tb.log("[HTTPS] GET... failed, error: " +  String(http_code) + '\n');
-        json_payload = "nothing";
-      }
-      Https.end(); 
-    }
-  }  
-  else {
-    Tb.log("[HTTPS] Unable to connect\n");   
-    json_payload = "nothing";
-  } 
-  //delete Wifi_s_client;
-  long hippi = ESP.getFreeHeap();
-  Tb.log("Heap: " +  String(hippi) + '\n');
-
-  //Wifi_s_client.stop();
-  return json_payload;
-}  */
-
 String get_bin_from_json(String json) {
   DynamicJsonDocument http_doc(4096);  
   String which_bin;  
@@ -252,51 +229,6 @@ String get_bin_from_json(String json) {
   }          
   return which_bin;
 }  
-
-
-String get_waste_bin_info_from_server(WiFiClientSecure Wifi_s_client) {
-  String json_payload;
-  DynamicJsonDocument http_doc(4096);
-  String which_bin;
-  int http_code;  
-  if(Wifi_s_client) {
-    Wifi_s_client.setInsecure();   // set secure client without certificate    
-    HTTPClient Https; //create an HTTPClient instance
-    if (Https.begin(Wifi_s_client, server_name)) {  // HTTPS      
-      http_code = Https.GET(); // start connection and send HTTP header          
-      Tb.log("[HTTPS] GET... code: " + String(http_code) + '\n');
-      if (http_code > 0) { // httpCode will be negative on error              
-        if (http_code == HTTP_CODE_OK || http_code == HTTP_CODE_MOVED_PERMANENTLY) {
-          json_payload = Https.getString(); // file found         
-          deserializeJson(http_doc, json_payload);
-          //Tb.log(json_payload);          
-          if (Tb.t.hour > 11) {            
-            which_bin = (const char*)http_doc[Tb.t.tomorrow];
-            //Tb.log(String(Tb.t.hour) + " " + Tb.t.tomorrow);
-          }
-          else {
-            which_bin = (const char*)http_doc[Tb.t.date];
-          }          
-        }
-        else {
-          Tb.log("[HTTPS] GET... failed, error: " +  String(http_code) + '\n');
-        }
-        Https.end();
-      }
-      else {
-        Tb.log("[HTTPS] Unable to connect\n");
-        Https.end();
-        //delete Wifi_s_client;
-        return "no_info";
-      }
-    }    
-    //long hippi = ESP.getFreeHeap();
-    //Tb.log("Heap: " +  String(hippi) + '\n');
-
-    //delete Wifi_s_client;
-    return which_bin;
-  }
-}
 
 /****** NeoPixel functions ***************************************************/
 
