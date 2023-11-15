@@ -13,6 +13,8 @@ I liked the idea of an illuminated waste-bin to remind us to put out the rubbish
 
 ### Software
 
+*** Use esp32 core version 2.0.14; the alpha versions of 3 have a problem with the neopixel lib ***
+
 The software gets the info from a JSON String published on a [server](https://www.weigu.lu/waste_collection/index.php) in the following format:
 
 ```JSON

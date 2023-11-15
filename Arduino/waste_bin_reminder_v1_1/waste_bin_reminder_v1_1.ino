@@ -1,5 +1,7 @@
 /*
-  waste_bin_reminder.ino
+  waste_bin_reminder.ino  
+  v1.0 2023-11-04
+  v1.1 2023-11-11 removed bug (memory run out and ESP reboots after panic)
   www.weigu.lu  
   Hardware used: Lolin C3 Mini
   for UDP, listen on Linux PC (UDP_LOG_PC_IP) with netcat command:
@@ -59,12 +61,12 @@ const char *WIFI_PASSWORD = MY_WIFI_PASSWORD;   // if no secrets, use config.h
   const char *OTA_NAME = MY_OTA_NAME;
   const char *OTA_PASS_HASH = MY_OTA_PASS_HASH; // use the config.h file
 #endif // ifdef OTA
-
 IPAddress UDP_LOG_PC_IP(UDP_LOG_PC_IP_BYTES);   // UDP log if enabled in setup
+WiFiClient espClient;
+WiFiClientSecure Wifi_s_client;
 
 /****** MQTT settings ******/
 const short MQTT_PORT = MY_MQTT_PORT;
-WiFiClient espClient;
 PubSubClient MQTT_Client(espClient);
 #ifdef MQTTPASSWORD
   const char *MQTT_USER = MY_MQTT_USER;
@@ -75,22 +77,27 @@ Adafruit_NeoPixel pixels(NUMPIXELS, PIXEL_PIN, NEO_GRB + NEO_KHZ800);
 
 ESPToolbox Tb;                                // Create an ESPToolbox Object
 
+
 /****** SETUP ****************************************************************/
 
-void setup() {  
-  Tb.set_udp_log(true, UDP_LOG_PC_IP, UDP_LOG_PORT);  
+void setup() {        
+  Tb.set_udp_log(true, UDP_LOG_PC_IP, UDP_LOG_PORT); 
+  init_pixels();   
+  show_pixels();  
   #ifdef STATIC
     Tb.set_static_ip(true,NET_LOCAL_IP, NET_GATEWAY, NET_MASK, NET_DNS);
   #endif // ifdef STATIC
   Tb.init_ntp_time();
-  Tb.init_wifi_sta(WIFI_SSID, WIFI_PASSWORD, NET_MDNSNAME, NET_HOSTNAME);    
-  MQTT_Client.setBufferSize(MQTT_MAXIMUM_PACKET_SIZE);
-  MQTT_Client.setServer(MQTT_SERVER,MQTT_PORT); //open connection MQTT server
+  Tb.init_wifi_sta(WIFI_SSID, WIFI_PASSWORD, NET_MDNSNAME, NET_HOSTNAME);
+  
+  delay(1000);
+  //WiFi.setTxPower(WIFI_POWER_8_5dBm);
   #ifdef OTA
     Tb.init_ota(OTA_NAME, OTA_PASS_HASH);
   #endif // ifdef OTA    
-  init_pixels();   
-  show_pixels();
+  delay(1000);
+  MQTT_Client.setBufferSize(MQTT_MAXIMUM_PACKET_SIZE);
+  MQTT_Client.setServer(MQTT_SERVER,MQTT_PORT); //open connection MQTT server
   Tb.log_ln("Setup done!");
 }
 
@@ -101,9 +108,12 @@ void loop() {
     ArduinoOTA.handle();
   #endif // ifdef OTA
   if (Tb.non_blocking_delay(PUBLISH_TIME)) { // PUBLISH_TIME in config.h
-    which_bin = get_waste_bin_info_from_server();
-    if (which_bin!="no_info") {
-      Tb.log("Which bin to use: " + String(which_bin) + '\n');
+    json = get_json_from_server();
+    //long hippi = ESP.getFreeHeap();
+    //Tb.log("Heap: " +  String(hippi) + '\n');
+    if (json!="nothing") {
+      which_bin = get_bin_from_json(json);
+      Tb.log("Which bin to use: " + String(which_bin) + '\n');      
       set_wastebin_color(which_bin);
       mqtt_publish();
       Tb.log("Waiting some time before the next round...\n");
@@ -159,16 +169,100 @@ void mqtt_publish() {
 
 /********** HTTPS functions **************************************************/
 
-String get_waste_bin_info_from_server() {
+String get_json_from_server() {
+  Serial.println("\nStarting connection to server...");
+  int http_code;
+  String json_payload;    
+  Wifi_s_client.setInsecure();   // set secure client without certificate
+  HTTPClient Https;               //create an HTTPClient instance
+  if (Https.begin(Wifi_s_client, server_name)) {  // HTTPS      
+    http_code = Https.GET(); // start connection and send HTTPS header
+    Tb.log("[HTTPS] GET... code: " + String(http_code) + '\n');
+    if (http_code > 0) { // httpCode will be negative on error              
+      if (http_code == HTTP_CODE_OK || http_code == HTTP_CODE_MOVED_PERMANENTLY) {
+        json_payload = Https.getString(); // file found 
+        //Tb.log(json_payload);          
+      }
+    }               
+    else {
+      Tb.log("[HTTPS] GET... failed, error: " +  String(http_code) + '\n');
+      json_payload = "nothing";
+    }
+    Wifi_s_client.stop();
+    Https.end();  
+  }       
+  else {
+    Tb.log("Https.begin failed\n");
+    json_payload = "nothing";
+  } 
+  return json_payload;
+}  
+
+/*String get_json_from_server() {
+  int http_code;
+  String json_payload;
+  WiFiClientSecure *Wifi_s_client = new WiFiClientSecure;
+  //WiFiClientSecure Wifi_s_client;
+  if(Wifi_s_client) {
+    Wifi_s_client->setInsecure();   // set secure client without certificate
+    //Wifi_s_client.setInsecure();   // set secure client without certificate
+    HTTPClient Https;               //create an HTTPClient instance
+    //if (Https.begin(*Wifi_s_client, server_name)) {  // HTTPS      
+    if (Https.begin(*Wifi_s_client, server_name)) {  // HTTPS      
+      http_code = Https.GET(); // start connection and send HTTPS header
+      Tb.log("[HTTPS] GET... code: " + String(http_code) + '\n');
+      if (http_code > 0) { // httpCode will be negative on error              
+        if (http_code == HTTP_CODE_OK || http_code == HTTP_CODE_MOVED_PERMANENTLY) {
+          json_payload = Https.getString(); // file found  
+        }
+      }           
+      else {
+        Tb.log("[HTTPS] GET... failed, error: " +  String(http_code) + '\n');
+        json_payload = "nothing";
+      }
+      Https.end(); 
+    }
+  }  
+  else {
+    Tb.log("[HTTPS] Unable to connect\n");   
+    json_payload = "nothing";
+  } 
+  //delete Wifi_s_client;
+  long hippi = ESP.getFreeHeap();
+  Tb.log("Heap: " +  String(hippi) + '\n');
+
+  //Wifi_s_client.stop();
+  return json_payload;
+}  */
+
+String get_bin_from_json(String json) {
+  DynamicJsonDocument http_doc(4096);  
+  String which_bin;  
+  deserializeJson(http_doc, json);
+  //Tb.log(json);          
+  if (Tb.t.hour > 11) {   
+    //https://arduinojson.org/v6/error/ambiguous-overload-for-operator-equal/
+    String tommorow = http_doc[Tb.t.tomorrow];
+    which_bin = tommorow;
+    //Tb.log(String(Tb.t.hour) + " " + Tb.t.tomorrow);
+  }
+  else {
+    String today = http_doc[Tb.t.date];
+    which_bin = today;
+  }          
+  return which_bin;
+}  
+
+
+String get_waste_bin_info_from_server(WiFiClientSecure Wifi_s_client) {
   String json_payload;
   DynamicJsonDocument http_doc(4096);
   String which_bin;
-  int http_code;
-  WiFiClientSecure *Wifi_s_client = new WiFiClientSecure;
+  int http_code;  
   if(Wifi_s_client) {
-    Wifi_s_client->setInsecure();   // set secure client without certificate    
+    Wifi_s_client.setInsecure();   // set secure client without certificate    
     HTTPClient Https; //create an HTTPClient instance
-    if (Https.begin(*Wifi_s_client, server_name)) {  // HTTPS      
+    if (Https.begin(Wifi_s_client, server_name)) {  // HTTPS      
       http_code = Https.GET(); // start connection and send HTTP header          
       Tb.log("[HTTPS] GET... code: " + String(http_code) + '\n');
       if (http_code > 0) { // httpCode will be negative on error              
@@ -176,8 +270,9 @@ String get_waste_bin_info_from_server() {
           json_payload = Https.getString(); // file found         
           deserializeJson(http_doc, json_payload);
           //Tb.log(json_payload);          
-          if (Tb.t.hour > 11) {
+          if (Tb.t.hour > 11) {            
             which_bin = (const char*)http_doc[Tb.t.tomorrow];
+            //Tb.log(String(Tb.t.hour) + " " + Tb.t.tomorrow);
           }
           else {
             which_bin = (const char*)http_doc[Tb.t.date];
@@ -190,23 +285,28 @@ String get_waste_bin_info_from_server() {
       }
       else {
         Tb.log("[HTTPS] Unable to connect\n");
+        Https.end();
+        //delete Wifi_s_client;
         return "no_info";
       }
     }    
+    //long hippi = ESP.getFreeHeap();
+    //Tb.log("Heap: " +  String(hippi) + '\n');
+
+    //delete Wifi_s_client;
     return which_bin;
   }
-}  
+}
 
 /****** NeoPixel functions ***************************************************/
 
 void init_pixels() {
-  pixels.begin(); // INITIALIZE NeoPixel strip object (REQUIRED)
+  pixels.begin(); // INITIALIZE NeoPixel strip object (REQUIRED)  
   pixels.clear(); // Set all pixel colors to 'off'  
 }  
 
 void show_pixels() {
-  unsigned int my_delay = 250; 
-  pixels.clear(); // Set all pixel colors to 'off'  
+  unsigned int my_delay = 250;   
   pixels.setPixelColor(0, pixels.Color(255, 255, 255)); // white
   pixels.show();
   delay (my_delay);
