@@ -118,8 +118,6 @@ void loop() {
     Tb.log("Which bin to use: " + String(which_bin) + '\n');
     set_wastebin_color(which_bin);
     mqtt_publish();    
-    long hippi = ESP.getFreeHeap();
-    Tb.log("Heap: " +  String(hippi) + '\n'); 
   }
   if (WiFi.status() != WL_CONNECTED) {   // if WiFi disconnected, reconnect
     Tb.init_wifi_sta(WIFI_SSID, WIFI_PASSWORD, NET_MDNSNAME, NET_HOSTNAME);
