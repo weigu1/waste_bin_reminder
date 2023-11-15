@@ -80,7 +80,6 @@ Adafruit_NeoPixel pixels(NUMPIXELS, PIXEL_PIN, NEO_GRB + NEO_KHZ800);
 
 ESPToolbox Tb;                                // Create an ESPToolbox Object
 
-
 /****** SETUP ****************************************************************/
 
 void setup() {        
@@ -116,10 +115,11 @@ void loop() {
   }
   if (Tb.non_blocking_delay(PUBLISH_TIME)) { // PUBLISH_TIME in config.h    
     which_bin = get_bin_from_json(json);
-    Tb.log("Which bin to use: " + String(which_bin) + '\n');      
+    Tb.log("Which bin to use: " + String(which_bin) + '\n');
     set_wastebin_color(which_bin);
-    mqtt_publish();
-    Tb.log("Waiting some time before the next round...\n");
+    mqtt_publish();    
+    long hippi = ESP.getFreeHeap();
+    Tb.log("Heap: " +  String(hippi) + '\n'); 
   }
   if (WiFi.status() != WL_CONNECTED) {   // if WiFi disconnected, reconnect
     Tb.init_wifi_sta(WIFI_SSID, WIFI_PASSWORD, NET_MDNSNAME, NET_HOSTNAME);
@@ -128,7 +128,7 @@ void loop() {
     mqtt_connect();
   }
   MQTT_Client.loop();                    // make the MQTT live
-  delay(10); // needed for the watchdog! (alt. yield())
+  delay(1); // needed for the watchdog! (alt. yield())
 }
 
 /********** MQTT functions ***************************************************/
@@ -213,21 +213,16 @@ String get_json_from_server() {
 }  
 
 String get_bin_from_json(String json) {
-  DynamicJsonDocument http_doc(4096);  
-  String which_bin;  
-  deserializeJson(http_doc, json);
-  //Tb.log(json);          
-  if (Tb.t.hour > 11) {   
-    //https://arduinojson.org/v6/error/ambiguous-overload-for-operator-equal/
+  DynamicJsonDocument http_doc(4096);    
+  deserializeJson(http_doc, json);  
+  if (Tb.t.hour > 11) {       
     String tommorow = http_doc[Tb.t.tomorrow];
-    which_bin = tommorow;
-    //Tb.log(String(Tb.t.hour) + " " + Tb.t.tomorrow);
+    return tommorow;
   }
   else {
     String today = http_doc[Tb.t.date];
-    which_bin = today;
+    return today;
   }          
-  return which_bin;
 }  
 
 /****** NeoPixel functions ***************************************************/

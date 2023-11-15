@@ -23,7 +23,7 @@ const char *MY_OTA_PASS_HASH = "myHash";     // Hash for password
 
 /****** MQTT settings ******/
 const char *MQTT_SERVER = "192.168.178.222";
-const long PUBLISH_TIME = 30000; //Publishes every in milliseconds
+const long PUBLISH_TIME = 60000; //Publishes every in milliseconds
 const int MQTT_MAXIMUM_PACKET_SIZE = 1024; // look in setup()
 const char *MQTT_CLIENT_ID = "waste_bin_reminder_23"; // this must be unique!!!
 String MQTT_TOPIC_OUT = "bin_reminder/data";
